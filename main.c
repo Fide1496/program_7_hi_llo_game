@@ -18,8 +18,8 @@ static int player_one_max=100;
 static int player_two_min=0;
 static int player_two_max=100;
 
-static int guess_one;
-static int guess_two;
+static int guess_one= -999;
+static int guess_two = -999;
 
 int sig_usr_1 = 0;
 int sig_usr_2 = 0;
@@ -60,8 +60,8 @@ void sigHandlerC(int sig){
         sig_usr_1 = 1;
 
         // Update Player 1's min/max based on last guess
-        if (guess_one != -1) {
-            if (guess_one > player_one_max) {
+        if (guess_one != -999) {
+            if (guess_one < player_one_max) {
                 player_one_min = guess_one;  // Too high, update min
             } else {
                 player_one_max = guess_one;  // Too low, update max
@@ -69,20 +69,20 @@ void sigHandlerC(int sig){
         }
 
         // Update Player 2's min/max based on last guess
-        if (guess_two != -1) {
-            if (guess_two > player_two_max) {
+        if (guess_two != -999) {
+            if (guess_two < player_two_max) {
                 player_two_min = guess_two;
             } else {
                 player_two_max = guess_two;
             }
         }
     } 
-    else if (sig == SIGUSR2) {
+    if (sig == SIGUSR2) {
         sig_usr_2 = 1;
 
         // Update Player 1's min/max based on last guess
-        if (guess_one != -1) {
-            if (guess_one > player_one_max) {
+        if (guess_one != -999) {
+            if (guess_one < player_one_max) {
                 player_one_min = guess_one;
             } else {
                 player_one_max = guess_one;
@@ -90,22 +90,22 @@ void sigHandlerC(int sig){
         }
 
         // Update Player 2's min/max based on last guess
-        if (guess_two != -1) {
-            if (guess_two > player_two_max) {
+        if (guess_two != -999) {
+            if (guess_two < player_two_max) {
                 player_two_min = guess_two;
             } else {
                 player_two_max = guess_two;
             }
         }
-    else if (sig == SIGINT){
+    }
+    if (sig == SIGINT){
         sig_usr_1 = 0;
         sig_usr_2 = 0;
     }
-    else if (sig == SIGTERM)
+    if (sig == SIGTERM)
     {
         exit(EXIT_SUCCESS);
     }
-}
 }
 
 // Player one: uses average of min and max as guess
@@ -145,11 +145,7 @@ void player_one(){
             }
             sleep(1);
             kill(getppid(), SIGUSR1);
-
             pause();
-
-            // if(sig_usr_1) min = guess;
-            // if (sig_usr_2) max = guess;
         }
     }
 }
@@ -167,7 +163,7 @@ void player_two(){
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
-    srand(1);
+    srand(time(NULL));
 
     player_two_min = 0;
     player_two_max = 101;
@@ -178,12 +174,8 @@ void player_two(){
         pause();
         kill(getppid(), SIGUSR2);
 
-        // min = 0;
-        // max = 101;
 
         while(1){
-            //Validate this guessing structure
-            // guess = min + rand() % (max-min);
 
             srand(10);
             guess_two = rand() % (player_two_max - player_two_min + 1) + player_two_min;
@@ -201,9 +193,6 @@ void player_two(){
             sleep(1);
             kill(getppid(), SIGUSR2);
             pause();
-
-            // if (sig_usr_1) min = guess;
-            // if (sig_usr_2) max = guess;
             
         }
     }
@@ -271,7 +260,6 @@ void referee(){
                 close(p2_guess_file);
             }
 
-            // IDK if I need these
             sig_usr_1 = 0;
             sig_usr_2 = 0;
 
@@ -282,19 +270,31 @@ void referee(){
                 player_one_score++;
                 break;
             }
-            if(p2_guess==correct_answer){
+            if(p2_guess == correct_answer){
                 printf("Player 2 wins!\n");
                 player_two_score++;
                 break;
             }
 
-            if(p1_guess < correct_answer)kill(child_one_pid, SIGUSR1);
-            if(p1_guess > correct_answer)kill(child_one_pid, SIGUSR2);
+            // if(p1_guess < correct_answer)kill(child_one_pid, SIGUSR1);
+            // if(p1_guess > correct_answer)kill(child_one_pid, SIGUSR2);
+            // // else kill(child_two_pid, SIGUSR2);
+
+            // if(p2_guess < correct_answer)kill(child_two_pid, SIGUSR1);
+            // if(p2_guess > correct_answer)kill(child_two_pid, SIGUSR2);
             // else kill(child_two_pid, SIGUSR2);
 
-            if(p2_guess < correct_answer)kill(child_two_pid, SIGUSR1);
-            if(p2_guess > correct_answer)kill(child_two_pid, SIGUSR2);
-            // else kill(child_two_pid, SIGUSR2);
+            if (p1_guess < correct_answer) {
+                kill(child_one_pid, SIGUSR1);  // Guess too low, increase min
+            } else {
+                kill(child_one_pid, SIGUSR2);  // Guess too high, decrease max
+            }
+            
+            if (p2_guess < correct_answer) {
+                kill(child_two_pid, SIGUSR1);  // Guess too low, increase min
+            } else {
+                kill(child_two_pid, SIGUSR2);  // Guess too high, decrease max
+            }
 
             kill(child_one_pid, SIGINT);
             kill(child_two_pid, SIGINT);
