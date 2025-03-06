@@ -18,6 +18,9 @@ static int player_one_max=100;
 static int player_two_min=0;
 static int player_two_max=100;
 
+static int guess_one;
+static int guess_two;
+
 int sig_usr_1 = 0;
 int sig_usr_2 = 0;
 
@@ -53,12 +56,47 @@ void sigHandlerP(int sig){
 
 // Child signal handler
 void sigHandlerC(int sig){
-    if (sig == SIGUSR1){
+    if (sig == SIGUSR1) {
         sig_usr_1 = 1;
-    }
-    if(sig == SIGUSR2){
+
+        // Update Player 1's min/max based on last guess
+        if (guess_one != -1) {
+            if (guess_one > player_one_max) {
+                player_one_min = guess_one;  // Too high, update min
+            } else {
+                player_one_max = guess_one;  // Too low, update max
+            }
+        }
+
+        // Update Player 2's min/max based on last guess
+        if (guess_two != -1) {
+            if (guess_two > player_two_max) {
+                player_two_min = guess_two;
+            } else {
+                player_two_max = guess_two;
+            }
+        }
+    } 
+    else if (sig == SIGUSR2) {
         sig_usr_2 = 1;
-    }
+
+        // Update Player 1's min/max based on last guess
+        if (guess_one != -1) {
+            if (guess_one > player_one_max) {
+                player_one_min = guess_one;
+            } else {
+                player_one_max = guess_one;
+            }
+        }
+
+        // Update Player 2's min/max based on last guess
+        if (guess_two != -1) {
+            if (guess_two > player_two_max) {
+                player_two_min = guess_two;
+            } else {
+                player_two_max = guess_two;
+            }
+        }
     else if (sig == SIGINT){
         sig_usr_1 = 0;
         sig_usr_2 = 0;
@@ -68,33 +106,40 @@ void sigHandlerC(int sig){
         exit(EXIT_SUCCESS);
     }
 }
+}
 
 // Player one: uses average of min and max as guess
 void player_one(){
 
-    signal(SIGUSR1, sigHandlerC);
-    signal(SIGUSR2, sigHandlerC);
-    signal(SIGINT, sigHandlerC);
-    signal(SIGTERM, sigHandlerC);
+    struct sigaction sa;
+    sa.sa_handler = sigHandlerC;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
 
-    int min = 0;
-    int max = 101;
+    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR2, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+
+
+    player_one_max = 101;
+    player_one_min = 0;
     int guess;
 
     while(1){
         pause();
 
         kill(getppid(), SIGUSR1);
-        min = 0;
-        max = 101;
+        // min = 0;
+        // max = 101;
 
         while(1){
-            guess = (min + max) /2;
-            int p1_guesses = checkError(open("player1_guess.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644), "Open player 1 guess file");
+            guess_one = (player_one_min + player_one_max) /2;
+            int p1_guesses = checkError(open("player1_guess.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644), "Open player 1 guess file\n");
 
             if (p1_guesses != -1) {
                 char buffer[16];
-                int len = snprintf(buffer, sizeof(buffer), "%d\n", guess);
+                int len = snprintf(buffer, sizeof(buffer), "%d\n", guess_one);
                 write(p1_guesses, buffer, len);
                 close(p1_guesses);
             }
@@ -103,8 +148,8 @@ void player_one(){
 
             pause();
 
-            if(sig_usr_1) min = guess;
-            if (sig_usr_2) max = guess;
+            // if(sig_usr_1) min = guess;
+            // if (sig_usr_2) max = guess;
         }
     }
 }
@@ -112,15 +157,20 @@ void player_one(){
 // Player two: uses random number between min and max as guess
 void player_two(){
 
-    signal(SIGUSR1, sigHandlerC);
-    signal(SIGUSR2, sigHandlerC);
-    signal(SIGINT, sigHandlerC);
-    signal(SIGTERM, sigHandlerC);
+    struct sigaction sa;
+    sa.sa_handler = sigHandlerC;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+
+    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR2, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 
     srand(1);
 
-    int min = 0;
-    int max = 101;
+    player_two_min = 0;
+    player_two_max = 101;
     int guess;
 
     while(1){
@@ -128,15 +178,18 @@ void player_two(){
         pause();
         kill(getppid(), SIGUSR2);
 
-        min = 0;
-        max = 101;
+        // min = 0;
+        // max = 101;
 
         while(1){
             //Validate this guessing structure
-            guess = min + rand() % (max-min);
+            // guess = min + rand() % (max-min);
+
+            srand(10);
+            guess_two = rand() % (player_two_max - player_two_min + 1) + player_two_min;
 
 
-            int p2_guesses = checkError(open("player2_guess.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644), "Open player 2 guess file");
+            int p2_guesses = checkError(open("player2_guess.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644), "Open player 2 guess file\n");
 
             if (p2_guesses != -1) {
                 char buffer[16];
@@ -149,19 +202,24 @@ void player_two(){
             kill(getppid(), SIGUSR2);
             pause();
 
-            if (sig_usr_1) min = guess;
-            if (sig_usr_2) max = guess;
+            // if (sig_usr_1) min = guess;
+            // if (sig_usr_2) max = guess;
             
-        
         }
     }
 }
 
 void referee(){
-    signal(SIGUSR1, sigHandlerP);
-    signal(SIGUSR2, sigHandlerP);
-    signal(SIGCHLD, sigHandlerP);
-    signal(SIGINT, sigHandlerP);
+
+    struct sigaction sa;
+    sa.sa_handler = sigHandlerP;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+
+    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR2, &sa, NULL);
+    sigaction(SIGCHLD, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
 
     sleep(5);
     kill(child_one_pid, SIGUSR1);
@@ -174,11 +232,11 @@ void referee(){
         // sig_usr_2 = 0;
 
         // Wait until start signals are both recieved
-        while(!(sig_usr_1 && sig_usr_2)){
+        while(sig_usr_1 == 0 || sig_usr_2 == 0){
             pause();
         }
 
-        int correct_answer = (rand()% 100+1);
+        int correct_answer = (rand()% 100 + 1);
         printf("Game #%d: Correct answer is %d\n", i, correct_answer);
 
         while(1){
@@ -192,8 +250,8 @@ void referee(){
             char buffer1[16], buffer2[16];
             int p1_guess = 0, p2_guess = 0;
 
-            int p1_guess_file = checkError(open("player1_guess.txt", O_RDONLY), "Open player 1 guess file");
-            int p2_guess_file = checkError(open("player2_guess.txt", O_RDONLY), "Open player 2 guess file");
+            int p1_guess_file = checkError(open("player1_guess.txt", O_RDONLY), "Open player 1 guess file\n");
+            int p2_guess_file = checkError(open("player2_guess.txt", O_RDONLY), "Open player 2 guess file\n");
 
             if (p1_guess_file != -1) {
                 int bytes_read = read(p1_guess_file, buffer1, sizeof(buffer1) - 1);
@@ -213,6 +271,10 @@ void referee(){
                 close(p2_guess_file);
             }
 
+            // IDK if I need these
+            sig_usr_1 = 0;
+            sig_usr_2 = 0;
+
             printf("Player 1 guessed: %d, Player 2 guessed: %d\n",p1_guess, p2_guess);
 
             if(p1_guess == correct_answer){
@@ -227,15 +289,16 @@ void referee(){
             }
 
             if(p1_guess < correct_answer)kill(child_one_pid, SIGUSR1);
-            else kill(child_two_pid, SIGUSR2);
+            if(p1_guess > correct_answer)kill(child_one_pid, SIGUSR2);
+            // else kill(child_two_pid, SIGUSR2);
 
             if(p2_guess < correct_answer)kill(child_two_pid, SIGUSR1);
-            else kill(child_two_pid, SIGUSR2);
+            if(p2_guess > correct_answer)kill(child_two_pid, SIGUSR2);
+            // else kill(child_two_pid, SIGUSR2);
 
             kill(child_one_pid, SIGINT);
             kill(child_two_pid, SIGINT);
         }
-
 
     }
 
@@ -246,6 +309,7 @@ void referee(){
     kill(child_one_pid, SIGTERM);
     kill(child_two_pid, SIGTERM);
 }
+
 
 int main(){
 
